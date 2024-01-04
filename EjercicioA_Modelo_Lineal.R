@@ -1,114 +1,88 @@
-# Install and load the ggcorrplot package
+install.packages("caret")
 install.packages("ggcorrplot")
 library(ggcorrplot)
+library(caret)
 
+#Asignamos nuestros datos y hacemos una primera observación de los mismos
 dataset<-read.csv("A:\\Downloads\\Prueba\\Examen\\Tooltest-dataset.csv", header=TRUE)
 head(dataset)
 dim(dataset)
+#Desde aquí podemos observar cómo la variable Target parece comportarse de forma binaria
 
+#Comprobamos que Target solo está compuesta por ceros y unos. Con esto ya podemos intuir que un modelo lineal
+#no será lo más adecuado.
+table(dataset$Target)
+
+#Antes de comenzar a modelar, revisamos las gráficas de todas las variables cruzadas. Con esto podemos ir
+#dándonos una idea de su comportamientos y relación con la variable a predecir "Target"
 plot(dataset)
+#Como se observa en la imagen podemos notar como algunas variables parece que no aportarán mucho, tales como
+#Alcohol-Sulfato, en las que vemos puntos por toda el área gráficada, también vemos algunas con cierta correlación
+#como free.sulfur.dioxide y total.sulfur dioxide, lo cual hace sentido
+
+#Revisaremos que los valores no tengan algún NA
+table(is.na(dataset))
+#Ningún NA presente
+
+#Haremos un análisis visual de correlación de las variables
+correlation_0 = round(cor(dataset), 2)
+ggcorrplot(correlation_0, hc.order = TRUE, type = "lower",
+           lab = TRUE)
+#Parece que sí existen variables con alta correlación como son density-residual.sugar y density-alcohol
+#Una decisión que podríamos tomar en este punto es quitar la variable density, al tener una correlación
+#inversa y otra directa podemos creer que sería mejor que quitar residual.sugar o alcohol.
+#No lo haremos para comprobarlo con el modelo.
+#Por último vemos como Target no parece estar altamente correlacionado con alguna de las demás variables
+#Esto nos permite pensar que podríamos tener valores p significativos más adelante
+
+#Procedemos a crear un primer modelo líneal con todas las variables para estimar Target
 linear_model=lm(formula = Target ~ fixed.acidity + volatile.acidity + citric.acid + residual.sugar + chlorides +
                   free.sulfur.dioxide + total.sulfur.dioxide + density + pH + sulphates + alcohol, data = dataset)
 summary(linear_model)
+#El resultado no es sorprendente, nuestro mayor indicador de rendimiento en un modelo lineal es R-cuadrada
+#Aquí vemos un valor de .17, esto indicaría que nuestro model es capaz de explicar solo un 17% de la
+#variabilidad observada en Target
+#Dependiendo de la aplicación un buen modelo lineal se esperaría que explique al menos el 50%
+#Por último al observar los valores p vemos que algunas variables no serían tan significativas para este modelo
+#Como son citric.acid y total.sulfur.dioxide. Tampoco es muy relevante pues el modelo no está siendo efectivo
 
-#Check Normalidad
 
 
+#Por continuar el ejercicio, haremos un análisis de los residuales. Veremos si se comportan similar a una normal
 lm_residuals=linear_model$residuals
-hist(lm_residuals)#No parece normal
+hist(lm_residuals)
 qqnorm(lm_residuals)
-qqline(lm_residuals)#Definitivamente no se comportan como normal
+qqline(lm_residuals)
+#Con solo el histograma podemos notar que no se comportan de manera normal, además creamos un gráfico 
+#Cuantil-Cuantil para ver si los puntos siguen la distribución normal. Muchos quedan fuera y bastante lejos
 
-#Multicollinearity 
-reduced_data <- subset(dataset, select = -Target)
-corr_matrix = round(cor(reduced_data), 2)
-ggcorrplot(corr_matrix, hc.order = TRUE, type = "lower",
-           lab = TRUE)
 
-reduced_data_no_density <- subset(dataset, select = -c(Target, density))
-corr_matrix_no_density = round(cor(reduced_data_no_density), 2)
-ggcorrplot(corr_matrix_no_density, hc.order = TRUE, type = "lower",
-           lab = TRUE)
-
+#A continuación utilizaremos una herramienta de Machine Learning que nos generará un modelo lineal que debería
+#ser parecido al que generamos más arriba
 linear_train_model <- train(
   Target ~ fixed.acidity + volatile.acidity + residual.sugar + chlorides +
     free.sulfur.dioxide + density + pH + sulphates, data = dataset,   method = "lm",family = "binomial")
 
 linear_train_model$results
+#Los resultados son esperados, un valor de R-cuadrada muy parecido al que nosotros generamos
 
 
-#voy a quitar por encima de .75, Es decir alcohol y residual.sugar
-second_linear_model=lm(formula = Target ~ fixed.acidity + volatile.acidity + citric.acid + chlorides +
-                  free.sulfur.dioxide + total.sulfur.dioxide +alcohol+residual.sugar + pH + sulphates, data = dataset)
-#Check Normalidad 2
-lm_residuals2=second_linear_model$residuals
+#Por último, haré un segundo modelo sin la variable densidad para ver si existe una mejora significativa
+#contra el primer modelo creado
+second_linear_model=lm(formula = Target ~ fixed.acidity + volatile.acidity + citric.acid + residual.sugar + chlorides +
+                         free.sulfur.dioxide + total.sulfur.dioxide  + pH + sulphates + alcohol, data = dataset)
 summary(second_linear_model)
+#El valor de R-cuadrada es muy parecido, no es un modelo apropiado tampoco.
 
-hist(lm_residuals2)#No parece normal
+#Repetiremos las pruebas de normalidad en residuos
+lm_residuals2=second_linear_model$residuals
+hist(lm_residuals2)
 qqnorm(lm_residuals2)
-qqline(lm_residuals2)#Definitivamente no se comportan como normal
+qqline(lm_residuals2)
+#Comprobamos que no se comportan de manera Normal
 
-par(mfrow=c(2,2))
-hist(lm_residuals)#No parece normal
-hist(lm_residuals2)#No parece normal
-qqnorm(lm_residuals)
-qqline(lm_residuals)#Definitivamente no se comportan como normal
-qqnorm(lm_residuals2)
-qqline(lm_residuals2)#Definitivamente no se comportan como normal
-
-
-#Multicollinearity 
-reduced_data2 <- subset(dataset, select = -c(Target, alcohol, residual.sugar))
-corr_matrix2 = round(cor(reduced_data2), 2)
-ggcorrplot(corr_matrix2, hc.order = TRUE, type = "lower",
-           lab = TRUE)
-
-#Analicemos las varianzas
-var_an=anova(linear_model, second_linear_model)
+#Haremos una prueba de análisis de varianza entre los dos modelos. Este test es útil cuando queremos
+#probar si un modelo más complejo justifica mayor cantidad de variables aún con una R-cuadrada mejor
+var_an=anova(second_linear_model,linear_model)
 var_an$`Pr(>F)`
-#Mucho menos de .05 rechazamos la hipótesis de que el segundo modelo sea mejor
-
-#Análisis de R cuadradas
-summary1=summary(linear_model)
-summary2=summary(second_linear_model)
-summary1$r.squared
-summary2$r.squared
-#Concluimos que el primer modelo es mejor
-
-#Analicemos los p-values de las variables del primer modelo
-summary1
-#Quitemos todos los que sean mayores a .05
-linear_model_3=lm(formula = Target ~ fixed.acidity + volatile.acidity +free.sulfur.dioxide + 
-                     density + pH + sulphates, data = dataset)
-#Check Normalidad 3
-lm_residuals3=linear_model_3$residuals
-hist(lm_residuals3)#No parece normal
-qqnorm(lm_residuals3)
-qqline(lm_residuals3)#Definitivamente no se comportan como normal
-
-#ANOVA lm1 vs lm3
-anova(linear_model, linear_model_3)
-summary(linear_model_3)$r.squared
-summary1$r.squared
-
-#plots residuales
-res <- resid(linear_model)
-plot(fitted(linear_model), res)
-abline(0,0)
-
-par(mfrow=c(1,1))
-
-res <- resid(second_linear_model)
-plot(fitted(second_linear_model), res)
-abline(0,0)
-
-res <- resid(linear_model_3)
-plot(fitted(linear_model_3), res)
-abline(0,0)
-
-plot(x=predict(linear_model), y= dataset$Target,
-     xlab='Predicted Values',
-     ylab='Actual Values',
-     main='Predicted vs. Actual Values')
-abline(a=0, b=1)
-
+# El valor p nos indica que nuestro primer modelo es más adecuado

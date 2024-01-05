@@ -17,7 +17,8 @@ d)45
 e)81
 f)Gráfica anexada como Top10Ventas.png
 g)Tendencia_Ventas.png, para los periodos estacionales hice un análisis semanal y otro mensual. Tengo la sospecha de que comparar las ventas semanalmente para estacionalidad en este caso no es lo mejor. Debido a que las semanas no siempre coinciden con los periodos de pago de nóminas por lo que podrían existir semanas desplazadas pero que reflejan el mismo comportamiento. Es por esto que consideré pertinente agrupar los datos por mes y ver cómo se comportaba una serie de tiempo mensual. En cualquier caso las semanas que más estacionalidad presentan son la 17, 25, 30, 31, 40, 47 y 48. Los meses son:Diciembre y Abril
-h)La variable Size
+h)La variable Size. Para contestar la segunda parte acerca de si cambia por departamento se hizo un análisis rápido en el que encontramos la mayor correlación entre ventas y las demás variables para cada depto.
+El resultado fue que Size sigue siendo la variable más con mayor correlación en la mayoría de los deptos. Por último, quitamos la variable Size para poder analizar la siguiente con mayor correlación teniendo como resultado la variable CPI.
 i)Sí existían Outliers y se removieron utilizando el método rango intercuartílico.
 j)Sí existían y se quitaron utilizando funciones para reemplazarlos por ceros
 k)Diciembre, Abril y Julio

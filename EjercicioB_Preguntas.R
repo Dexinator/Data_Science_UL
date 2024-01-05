@@ -150,3 +150,7 @@ text(b, labels =table(stores$Type))
 
 #Histograma tamaño de las tiendas
 hist(stores$Size)
+
+#Cantidad de registros
+length(feats[1,1])
++length(stores[,1])+length(feats[,1])

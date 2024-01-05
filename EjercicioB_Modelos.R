@@ -1,12 +1,3 @@
-install.packages("seasonal")
-install.packages("x13binary")
-install.packages("forecast")
-install.packages("fpp2")
-install.packages("tseries")
-install.packages("lubridate",dependencies = TRUE)
-install.packages("ggplot2")
-install.packages("stats")
-
 library(lubridate)
 library(forecast)
 library(fpp2)
@@ -18,124 +9,73 @@ library(tidyverse)
 library(ggplot2)
 library(stats)
 
+
+#Lo primero que haremos es importar nuestros datos y revisar los encabezados para ver el tipo de datos
 feats=read.csv("A:\\Downloads\\Prueba\\Examen\\walmart-recruiting-store-sales-forecasting\\features.csv")
 stores=read.csv("A:\\Downloads\\Prueba\\Examen\\walmart-recruiting-store-sales-forecasting\\stores.csv")
 train=read.csv("A:\\Downloads\\Prueba\\Examen\\walmart-recruiting-store-sales-forecasting\\train.csv")
+head(feats)
+head(train)
+head(stores)
 
-colSums(is.na(train))
+#Veo que existen algunos valores NA por lo que procederé a convertirlos en ceros para evitar futuros conflictos
+#También convertiré las fechas a formato Date para evitar futuros errores
+feats[is.na(feats)] = 0
+stores[is.na(stores)] = 0
+train[is.na(train)] = 0
+train$Date=as.Date(train$Date,format="%m/%d/%Y")
+feats$Date=as.Date(feats$Date,format="%m/%d/%Y")
 
-#Mi primer dato es del viernes 5 de Febrero, hace sentido que sea la 5 toma del año pues el primer viernes del año fue dia primero y tendría la info del año anterior
+
+#Primero haremos un análisis desde la perspectiva de series de tiempo.
+#Para esto, es necesario agrupar los datos por fecha, esta información se encuentra en los datos train
+#Es importante que si agrupo las fechas sume las ventas para cada una.
 ventas_semanales <- train %>% group_by(Date) %>% 
-  summarize(venta_semanal=sum(Weekly_Sales),
-            .groups = 'drop')
+  summarize(venta_semanal=sum(Weekly_Sales))
+head(ventas_semanales)
 
-as.Date(ventas_semanales$Date,format="%m/%d/%Y")
+#Ya que tenemos nuestro tiempo y datos quiero quitar los outliers existentes
+#Lo haré con el método IQR (rango intercuartílico) que me permitirá detectarlos correctamente
+quantiles <- quantile(ventas_semanales$venta_semanal, probs=c(.25, .75))
+IQR=IQR(ventas_semanales$venta_semanal)
+Lower= quantiles[1] - 1.5*IQR
+Upper= quantiles[2] + 1.5*IQR 
+ventas_semanales[2][ventas_semanales[2]>Upper]=Upper
+ventas_semanales[2][ventas_semanales[2]<Lower]=Lower
+#Cambié todos mis outliers por el valor del rango superior o inferior según el caso
 
-ventas_mensuales<-ventas_semanales %>% 
-  group_by(month = lubridate::floor_date(as.Date(Date,format="%m/%d/%Y"), 'month')) %>%
-  summarize(venta_mensual = sum(venta_semanal))
+#Revisaré la gráfica para tener una aproximación visual a mis datos
+plot(ventas_semanales, type="l")
+#Se ve bien, parece que el acercamiento para outliers fue correcto
 
-ventas_anuales<-ventas_semanales %>% 
-  group_by(year = lubridate::floor_date(as.Date(Date,format="%m/%d/%Y"), 'year')) %>%
-  summarize(venta_anual = sum(venta_semanal))
+#Comenzaré creando mi serie de tiempo con frequencia 52 para que sea semanal
+#Mi primer dato es del viernes 5 de Febrero, hace sentido que sea la 5 toma del año pues el primer viernes
+#del año fue dia primero y tendría la info del año anterior
+ST_Ventas=ts(ventas_semanales$venta_semanal, frequency = 52, start = c(2010, 5))
+ggseasonplot(ST_Ventas)
+#Graficando la serie de tiempo cada año se puede apreciar cierta estacionalidad
 
-ST_Ventas=ts(ventas_mensuales$venta_mensual, frequency = 12, start = c(2010, 2))
-print(ST_Ventas, calendar = T)
-sT_Ventas_WM=seas(ST_Ventas)
+#Haremos la prueba de Dickey-Fuller para probar estacionariedad
+adf.test(ST_Ventas)
+#Nuestro valor p es menor a .01 por lo que puedo concluir que la serie tiene un comportamiento estacionario y
+#es adecuada para un modelo ARIMA
 
+#Aplicaré la función decompose tratándola como una serie aditiva ya que estamos trabajando con gasto
+#la intuición me dice que obedece a una suma más que a alguna multiplicación
+Comps_ST_Ventas<- decompose(ST_Ventas)
+plot(Comps_ST_Ventas$trend)
+#Aquí vemos la existencia de una tendencia al crecimiento
 
-t=0:32
-par(mfcol=c(2,2))
-plot(t,ventas_mensuales$venta_mensual,
-     type='l',col='red',
-     xlab = "time (t)",
-     ylab = "Y(t)",
-     main = "Stationary signal")
-acf(ventas_mensuales$venta_mensual,lag.max = length(ventas_mensuales$venta_mensual),
-    xlab = "lag #", ylab = 'ACF',main=' ')
-
-t2=0:142
-plot(t2,ventas_semanales$venta_semanal,
-     type='l',col='red',
-     xlab = "time (t)",
-     ylab = "Y(t)",
-     main = "Stationary signal")
-acf(ventas_semanales$venta_semanal,lag.max = length(ventas_semanales$venta_semanal),
-    xlab = "lag #", ylab = 'ACF',main=' ')
-
-
-
-par(mfcol=c(1,1))
-plot(ventas_mensuales, type="l")
-plot(ventas_semanales$venta_semanal, type="l")
-plot(ventas_anuales$venta_anual, type="l")
-
-
+#Una buena primera aproximación a un modelo es un ARIMA, utilizaremos solo las observaciones que ya tenemos
+#de las ventas en el tiempo, ya ordenadas como serie de tiempo con la carga estacional y estacionaria que
+#tienen.
 ST_Ventas %>%
   auto.arima() %>%
-  forecast(h=20) %>%
+  forecast(h=50) %>%
   autoplot()
+modelo_ARIMA=auto.arima(ST_Ventas)
 
-Comps_ST_Ventas<- decompose(ST_Ventas)
-plot(Comps_ST_Ventas)
-
-#Quitemos outliers
-quartiles <- quantile(train$Weekly_Sales, probs=c(.25, .75), na.rm = FALSE)
-IQR=IQR(train$Weekly_Sales)
-Lower <- quartiles[1] - 1.5*IQR
-Upper <- quartiles[2] + 1.5*IQR 
-
-data_no_outlier <- subset(train, train$Weekly_Sales > Lower & train$Weekly_Sales< Upper)
-
-ventas_semanales_NO <- data_no_outlier %>% group_by(Date) %>% 
-  summarize(venta_semanal=sum(Weekly_Sales),
-            .groups = 'drop')
-
-ventas_mensuales_NO<-ventas_semanales_NO %>% 
-  group_by(month = lubridate::floor_date(as.Date(Date,format="%m/%d/%Y"), 'month')) %>%
-  summarize(venta_mensual = sum(venta_semanal))
-
-ventas_anuales_NO<-ventas_semanales_NO %>% 
-  group_by(year = lubridate::floor_date(as.Date(Date,format="%m/%d/%Y"), 'year')) %>%
-  summarize(venta_anual = sum(venta_semanal))
-
-par(mfcol=c(3,1))
-plot(ventas_mensuales_NO, type="l")
-plot(ventas_semanales_NO$venta_semanal, type="l")
-plot(ventas_anuales_NO$venta_anual, type="l")
-
-ST_Ventas_NO=ts(ventas_semanales_NO$venta_semanal, frequency = 52, start = c(2010, 5))
-ST_Ventas_NO=log(ST_Ventas_NO)
-ST_Ventas_Mensual_NO=ts(ventas_mensuales_NO$venta_mensual, frequency = 12, start = c(2010, 2))
-ST_Ventas_Mensual_NO=log(ST_Ventas_Mensual_NO)
-ST_Ventas_NO %>%
-  auto.arima() %>%
-  forecast(h=52) %>%
-  autoplot()
-
-ggseasonplot(ST_Ventas_NO)
-ggseasonplot(ST_Ventas_Mensual_NO)
-
-lambda0<-BoxCox.lambda(ST_Ventas_NO)
-lambda0
-BoxCoxWM<-BoxCox(ST_Ventas_NO,lambda0)
-BoxCoxWM
-ST_Ventas_NO
-autoplot(BoxCoxWM)
-ndiffs(BoxCoxWM)
-
-ggAcf(BoxCoxWM,lag.max = 100)
-
-predict_model<-Arima(ST_Ventas_NO,order=c(1,0,1))
-checkresiduals(predict_model)
-#Parece que los residuos se comportan como ruido blanco
-
-autoplot(forecast(predict_model))
-
-
-ndiffs(ST_Ventas_NO)
-adf.test(BoxCoxWM) #Dickey Fulier
-adf.test(ST_Ventas_NO)
-acf(ST_Ventas_NO)
-
-
+#Por último revisamos los residuos, visualmente se comportan de manera Normal
+#Haremos un test Ljung-Box para comprobarlo
+checkresiduals(modelo_ARIMA)
+#Parece ser una buena propuesta como modelo de predicción

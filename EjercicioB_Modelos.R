@@ -54,6 +54,12 @@ plot(ventas_semanales, type="l")
 ST_Ventas=ts(ventas_semanales$venta_semanal, frequency = 52, start = c(2010, 5))
 ggseasonplot(ST_Ventas)
 #Graficando la serie de tiempo cada año se puede apreciar cierta estacionalidad
+#Para tener más claridad acerca de la estacionalidad haremos también la gráfica por mes
+ventas_mensuales<-ventas_semanales %>% 
+  group_by(month = lubridate::floor_date(Date, 'month')) %>%
+  summarize(venta_mensual = sum(venta_semanal))
+ST_Ventas_Mensual=ts(ventas_mensuales$venta_mensual, frequency = 12, start = c(2010, 2))
+ggseasonplot(ST_Ventas_Mensual)
 
 #Haremos la prueba de Dickey-Fuller para probar estacionariedad
 adf.test(ST_Ventas)

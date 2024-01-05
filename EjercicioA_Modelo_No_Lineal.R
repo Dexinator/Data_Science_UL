@@ -2,6 +2,7 @@ library(caret)
 library(dplyr)
 library(arm)
 library(kernlab)
+library(pROC)
 
 #importamos los datos, en caso no los tengamos aún
 dataset<-read.csv("A:\\Downloads\\Prueba\\Examen\\Tooltest-dataset.csv", header=TRUE)
@@ -71,4 +72,17 @@ binnedplot(fitted(log_model2),
            cex.pts = 0.8, 
            col.pts = 1, 
            col.int = "gray")
+
+#Para terminar, vemos los dos modelos logísticos con curvas ROC, podemos notar que tienen un comportamiento práctiacmente idéntico
+invisible(plot(roc(Train_Data$Target,
+                   fitted(log_model)),
+               col = "red", 
+               main = "ROC curves: logistic model 1 (red) vs. logistic model 2 (blue)"))
+
+invisible(plot(roc(Train_Data$Target,
+                   fitted(log_model2)),
+               print.auc = T, 
+               col = "blue", 
+               add = T))
+
 
